@@ -37,7 +37,7 @@ class Inception_V3 {
 
     await this._model.finish();
     this._compilation = await this._model.createCompilation();
-    this._compilation.setPreference(this._nn.SUSTAINED_SPEED);
+    this._compilation.setPreference(this._nn.PREFER_SUSTAINED_SPEED);
     await this._compilation.finish();
     this._execution = await this._compilation.createExecution();
   }
