@@ -12,79 +12,38 @@ class SimpleModel {
   }
 
   async createCompiledModel() {
-    let operandIndex = 0;
-  
-    // create a Model.
-    this.model_ = await nn.createModel();
-
     let float32TensorType = {type: nn.TENSOR_FLOAT32, dimensions: [TENSOR_SIZE]};
-    let scalarInt32Type = {type: nn.INT32};
-
-    // We first add the operand for the NONE activation function, and set its
-    // value to FUSED_NONE.
-    // This constant scalar operand will be used for all 3 operations.
-    let fusedActivationFuncNone = operandIndex++;
-    this.model_.addOperand(scalarInt32Type);
-    this.model_.setOperandValue(fusedActivationFuncNone, new Int32Array([nn.FUSED_NONE]));
 
     // tensor0 is a constant tensor that was established during training.
     // We read these values from the corresponding memory object.
-    let tensor0 = operandIndex++;
-    this.model_.addOperand(float32TensorType);
-    this.model_.setOperandValue(tensor0, new Float32Array(this.arrayBuffer_, 0, TENSOR_SIZE));
+    const tensor0 = nn.constant(float32TensorType, new Float32Array(this.arrayBuffer_, 0, TENSOR_SIZE));
 
     // tensor1 is one of the user provided input tensors to the trained this.model_.
     // Its value is determined pre-execution.
-    let tensor1 = operandIndex++;
-    this.model_.addOperand(float32TensorType);
+    const tensor1 = nn.input(float32TensorType);
 
     // tensor2 is a constant tensor that was established during training.
     // We read these values from the corresponding memory object.
-    let tensor2 = operandIndex++;
-    this.model_.addOperand(float32TensorType);
-    this.model_.setOperandValue(tensor2, new Float32Array(this.arrayBuffer_, TENSOR_SIZE * Float32Array.BYTES_PER_ELEMENT, TENSOR_SIZE));
+    const tensor2 = nn.constant(float32TensorType, new Float32Array(this.arrayBuffer_, TENSOR_SIZE * Float32Array.BYTES_PER_ELEMENT, TENSOR_SIZE));
 
     // tensor3 is one of the user provided input tensors to the trained this.model_.
     // Its value is determined pre-execution.
-    let tensor3 = operandIndex++;
-    this.model_.addOperand(float32TensorType);
+    const tensor3 = nn.input(float32TensorType);
 
     // intermediateOutput0 is the output of the first ADD operation.
     // Its value is computed during execution.
-    let intermediateOutput0 = operandIndex++;
-    this.model_.addOperand(float32TensorType);
+    const intermediateOutput0 = nn.add(tensor0, tensor1);
 
     // intermediateOutput1 is the output of the second ADD operation.
     // Its value is computed during execution.
-    let intermediateOutput1 = operandIndex++;
-    this.model_.addOperand(float32TensorType);
+    const intermediateOutput1 = nn.add(tensor2, tensor3);
 
     // multiplierOutput is the output of the MUL operation.
     // Its value will be computed during execution.
-    let multiplierOutput = operandIndex++;
-    this.model_.addOperand(float32TensorType);
+    const multiplierOutput = nn.mul(intermediateOutput0, intermediateOutput1);
 
-    // Add the MUL operation. (Test operations reorder)
-    // Note that intermediateOutput0 and intermediateOutput1 are specified
-    // as inputs to the operation.
-    this.model_.addOperation(nn.MUL, [intermediateOutput0, intermediateOutput1, fusedActivationFuncNone], [multiplierOutput]);
-
-    // Add the first ADD operation.
-    this.model_.addOperation(nn.ADD, [tensor0, tensor1, fusedActivationFuncNone], [intermediateOutput0]);
-
-    // Add the second ADD operation.
-    // Note the fusedActivationFuncNone is used again.
-    this.model_.addOperation(nn.ADD, [tensor2, tensor3, fusedActivationFuncNone], [intermediateOutput1]);
-
-    // Identify the input and output tensors to the this.model_.
-    // Inputs: {tensor1, tensor3}
-    // Outputs: {multiplierOutput}
-    this.model_.identifyInputsAndOutputs([tensor1, tensor3], [multiplierOutput]);
-
-    // Finish constructing the this.model_.
-    // The values of constant and intermediate operands cannot be altered after
-    // the finish function is called.
-    await this.model_.finish();
+    // create a Model.
+    this.model_ = await nn.createModelByOutputs([multiplierOutput], {backend: 'WASM'});
 
     // Create a Compilation object for the constructed this.model_.
     this.compilation_ = await this.model_.createCompilation();

@@ -3,6 +3,8 @@ import Model from './Model'
 import Compilation from './Compilation'
 import Execution from './Execution'
 import WebGLModel from './webgl/WebGLModel'
+import Operand from './Operand'
+import Operation from './Operation'
 
 export default class NeuralNetworkContext {
   constructor() {
@@ -27,6 +29,74 @@ export default class NeuralNetworkContext {
       return "WebAssembly is not available";
     }
     return new Model(options);
+  }
+
+  async createModelByOutputs(outputs, options = {}) {
+    let operands = [];
+    let operations = [];
+    function handleOperation(operation) {
+      operations.push(operation);
+      for (let i in operation._inputs) {
+        handleOperand(operation._inputs[i]);
+      }
+    }
+    function handleOperand(operand) {
+      operands.push(operand);
+      if (operand._operation) {
+        handleOperation(operand._operation);
+      }
+    }
+    for (let i in outputs) {
+      handleOperand(outputs[i]);
+    }
+    let model = new Model(options);
+    let inputs = [];
+    for (let i in operands) {
+      const operand = operands[i];
+      model.addOperand(operand._desc);
+      if (!operand._value && !operand._operation) {
+        inputs.push(operand);
+      } else if (operand._value) {
+        model.setOperandValue(i, operand._value);
+      }
+      operand._setIndex(i);
+    }
+    for (let i in operations) {
+      const operation = operations[i];
+      const ins = operation._inputs.map((operand) => {return operand._index;});
+      const outs = operation._outputs.map((operand) => {return operand._index;});
+      model.addOperation(operation._type, ins, outs);
+    }
+    const inputIndex = inputs.map((operand) => {return operand._index;});
+    const outputIndex = outputs.map((operand) => {return operand._index;});
+    model.identifyInputsAndOutputs(inputIndex, outputIndex);
+    await model.finish();
+    return model;
+  }
+
+
+  input(desc) {
+    return new Operand(desc);
+  }
+
+  constant(desc, value) {
+    let constant = new Operand(desc);
+    constant._setValue(value);
+    return constant;
+  }
+
+  add(a, b) {
+    const fuseCode = this.constant({type: this.INT32}, new Int32Array([nn.FUSED_NONE]));
+    let result = new Operand(a._desc);
+    result._setOperation(new Operation(OperationCode.ADD, [a, b, fuseCode]));
+    return result;
+  }
+
+  mul(a, b) {
+    const fuseCode = this.constant({type: this.INT32}, new Int32Array([nn.FUSED_NONE]));
+    let result = new Operand(a._desc);
+    result._setOperation(new Operation(OperationCode.MUL, [a, b, fuseCode]));
+    return result;
   }
 
   _initOperandTypes() {
