@@ -60,23 +60,168 @@ async function tfAdd(inputDims) {
   document.getElementById('op1').innerText='Op add cost'+timeCost+'ms';
 }
 
-const iterations = 100;
+const iterations = 10;
 
 async function tfConv2d(inputDims,filterDims){
   tf.setBackend('webgpu');
   await tf.ready();
-  const input=tf.truncatedNormal(inputDims,1);
-  const filter=tf.truncatedNormal(filterDims,1);
-  let res=tf.conv2d(input,filter,1,'valid');
+  const input=tf.ones(inputDims);
+  const filter=tf.ones(filterDims);
+  const bias = tf.ones([filterDims[3]]);
+  let res=tf.conv2d(input,filter,1,'same');
   let result = await res.data();
   let start=performance.now();
   for(let i=0;i<iterations;i++){
-    tf.conv2d(input,filter,1,'valid');
+    const im = tf.conv2d(input,filter,1,'same');
+    res = im.add(bias);
     result = await res.data();
   }
   console.log(result);
   let timeCost=(performance.now()-start)/iterations;
   document.getElementById('op1').innerText ='tfConv2d cost :'+timeCost+'ms';
+}
+
+async function WebNNConvGPU(inputDims,filterDims) {
+  tf.setBackend('webgpu');
+  await tf.ready();
+  let device=tf.backend().device;
+  const nn = navigator.ml.getNeuralNetworkContext();
+  options={
+    "backend": "WebML",
+    "prefer": "sustained"
+  };
+  let model = await nn.createModel(options);
+  let operandIndex = 0;
+
+  // inputDims [n,h,w,i]
+  // filterDims [h,w,i,o]
+  let type0 = {type: nn.TENSOR_FLOAT32, dimensions: inputDims};
+  let type1 = {type: nn.TENSOR_FLOAT32, dimensions: [filterDims[3], filterDims[0], filterDims[1], filterDims[2]]};
+  let type2 = {type: nn.TENSOR_FLOAT32, dimensions: [filterDims[3]]};
+  let type3 = {type: nn.INT32};
+
+  let op1 = operandIndex++;
+  model.addOperand(type0);
+  let op2 = operandIndex++;
+  model.addOperand(type1);
+  let op3 = operandIndex++;
+  model.addOperand(type2);
+  let pad0 = operandIndex++;
+  model.addOperand(type3);
+  let act = operandIndex++;
+  model.addOperand(type3);
+  let stride = operandIndex++;
+  model.addOperand(type3);
+  let op4 = operandIndex++;
+  model.addOperand(type0);
+
+  const filter=await tf.ones(filterDims).data();
+  const bias = await tf.ones([filterDims[3]]).data();
+  model.setOperandValue(op2, filter);
+  model.setOperandValue(op3, bias);
+  model.setOperandValue(pad0, new Int32Array([(filterDims[1]-1)/2]));
+  model.setOperandValue(act, new Int32Array([0]));
+  model.setOperandValue(stride, new Int32Array([1]));
+  model.addOperation(nn.CONV_2D, [op1, op2, op3, pad0, pad0, pad0, pad0, stride, stride, act], [op4]);
+
+  model.identifyInputsAndOutputs([op1], [op4]);
+  await model.finish();
+
+  let compilation = await model.createCompilation();
+  compilation.setPreference(nn.PREFER_SUSTAINED_SPEED);
+  await compilation.finish();
+  let execution = await compilation.createExecution();
+
+  const input=tf.ones(inputDims);
+  const output=tf.zeros(inputDims);
+
+  let inputBuffer=await tf.backend().getGPUBuffer(input.dataId);
+  let outputBuffer = await tf.backend().getGPUBuffer(output.dataId);
+
+  let start = performance.now();
+  let result;
+  for (let i=0;i<iterations;i++) {
+    const commandEncoder = device.createCommandEncoder();
+    commandEncoder.setNnGraphInput(inputBuffer, 0, execution);
+    commandEncoder.setNnGraphOutput(outputBuffer, 0, execution);
+    commandEncoder.executeNnGraph(execution);
+    device.getQueue().submit([commandEncoder.finish()]);
+  
+    result = await output.data();
+  }
+  console.log(result);
+  let timeCost=(performance.now()-start)/(iterations-1);
+
+  document.getElementById('op2').innerText ='WebML conv2d cost'+timeCost+'ms';
+
+}
+
+async function WebNNConvCPU(inputDims,filterDims) {
+  tf.setBackend('webgpu');
+  await tf.ready();
+  let device=tf.backend().device;
+  const nn = navigator.ml.getNeuralNetworkContext();
+  options={
+    "backend": "WebML",
+    "prefer": "sustained"
+  };
+  let model = await nn.createModel(options);
+  let operandIndex = 0;
+
+  // inputDims [n,h,w,i]
+  // filterDims [h,w,i,o]
+  let type0 = {type: nn.TENSOR_FLOAT32, dimensions: inputDims};
+  let type1 = {type: nn.TENSOR_FLOAT32, dimensions: [filterDims[3], filterDims[0], filterDims[1], filterDims[2]]};
+  let type2 = {type: nn.TENSOR_FLOAT32, dimensions: [filterDims[3]]};
+  let type3 = {type: nn.INT32};
+
+  let op1 = operandIndex++;
+  model.addOperand(type0);
+  let op2 = operandIndex++;
+  model.addOperand(type1);
+  let op3 = operandIndex++;
+  model.addOperand(type2);
+  let pad0 = operandIndex++;
+  model.addOperand(type3);
+  let act = operandIndex++;
+  model.addOperand(type3);
+  let stride = operandIndex++;
+  model.addOperand(type3);
+  let op4 = operandIndex++;
+  model.addOperand(type0);
+
+  const filter=await tf.ones(filterDims).data();
+  const bias = await tf.ones([filterDims[3]]).data();
+  model.setOperandValue(op2, filter);
+  model.setOperandValue(op3, bias);
+  model.setOperandValue(pad0, new Int32Array([(filterDims[1]-1)/2]));
+  model.setOperandValue(act, new Int32Array([0]));
+  model.setOperandValue(stride, new Int32Array([1]));
+  model.addOperation(nn.CONV_2D, [op1, op2, op3, pad0, pad0, pad0, pad0, stride, stride, act], [op4]);
+
+  model.identifyInputsAndOutputs([op1], [op4]);
+  await model.finish();
+
+  let compilation = await model.createCompilation();
+  compilation.setPreference(nn.PREFER_SUSTAINED_SPEED);
+  await compilation.finish();
+  let execution = await compilation.createExecution();
+
+  const input=await tf.ones(inputDims).data();
+  const output=await tf.zeros(inputDims).data();
+
+  execution.setInput(0, input);
+  execution.setOutput(0, output);
+
+  let start = performance.now();
+  for (let i=0;i<iterations;i++) {
+    result = await execution.startCompute();
+  }
+  console.log(output);
+  let timeCost=(performance.now()-start)/(iterations-1);
+
+  document.getElementById('op2').innerText ='WebML conv2d cost'+timeCost+'ms';
+
 }
 
 async function tfAddAndConv2d(inputDims,filterDims) {
@@ -130,149 +275,6 @@ async function tfModel(inputDims,filterDims){
   tf.tidy(()=>model.predict(input)  )}
   let timeCost=(performance.now()-start)/5;
   document.getElementById('op1').innerText ='model cost :'+timeCost+'ms';
-}
-
-async function WebMLConvGPU(inputDims,filterDims) {
-  tf.setBackend('webgpu');
-  await tf.ready();
-  let device=tf.backend().device;
-  const nn = navigator.ml.getNeuralNetworkContext();
-  options={
-    "backend": "WebML",
-    "prefer": "sustained"
-  };
-  let model = await nn.createModel(options);
-  let operandIndex = 0;
-
-  // inputDims [n,h,w,i]
-  // filterDims [h,w,i,o]
-  let type0 = {type: nn.TENSOR_FLOAT32, dimensions: inputDims};
-  let type1 = {type: nn.TENSOR_FLOAT32, dimensions: [filterDims[3], filterDims[0], filterDims[1], filterDims[2]]};
-  let type2 = {type: nn.TENSOR_FLOAT32, dimensions: [filterDims[3]]};
-  let type3 = {type: nn.INT32};
-
-  let op1 = operandIndex++;
-  model.addOperand(type0);
-  let op2 = operandIndex++;
-  model.addOperand(type1);
-  let op3 = operandIndex++;
-  model.addOperand(type2);
-  let pad0 = operandIndex++;
-  model.addOperand(type3);
-  let act = operandIndex++;
-  model.addOperand(type3);
-  let stride = operandIndex++;
-  model.addOperand(type3);
-  let op4 = operandIndex++;
-  model.addOperand(type0);
-
-  const filter=await tf.zeros(filterDims).data();
-  const bias = await tf.ones([filterDims[3]]).data();
-  model.setOperandValue(op2, filter);
-  model.setOperandValue(op3, bias);
-  model.setOperandValue(pad0, new Int32Array([(filterDims[1]-1)/2]));
-  model.setOperandValue(act, new Int32Array([0]));
-  model.setOperandValue(stride, new Int32Array([1]));
-  model.addOperation(nn.CONV_2D, [op1, op2, op3, pad0, pad0, pad0, pad0, stride, stride, act], [op4]);
-
-  model.identifyInputsAndOutputs([op1], [op4]);
-  await model.finish();
-
-  let compilation = await model.createCompilation();
-  compilation.setPreference(nn.PREFER_SUSTAINED_SPEED);
-  await compilation.finish();
-  let execution = await compilation.createExecution();
-
-  const input=tf.zeros(inputDims);
-  const output=tf.zeros(inputDims);
-
-  let inputBuffer=await tf.backend().getGPUBuffer(input.dataId);
-  let outputBuffer = await tf.backend().getGPUBuffer(output.dataId);
-
-  let start = performance.now();
-  let result;
-  for (let i=0;i<iterations;i++) {
-    const commandEncoder = device.createCommandEncoder();
-    commandEncoder.setNnGraphInput(inputBuffer, 0, execution);
-    commandEncoder.setNnGraphOutput(outputBuffer, 0, execution);
-    commandEncoder.executeNnGraph(execution);
-    device.getQueue().submit([commandEncoder.finish()]);
-  
-    result = await output.data();
-  }
-  console.log(result);
-  let timeCost=(performance.now()-start)/(iterations-1);
-
-  document.getElementById('op2').innerText ='WebML conv2d cost'+timeCost+'ms';
-
-}
-
-async function WebMLConv(inputDims,filterDims) {
-  tf.setBackend('webgpu');
-  await tf.ready();
-  let device=tf.backend().device;
-  const nn = navigator.ml.getNeuralNetworkContext();
-  options={
-    "backend": "WebML",
-    "prefer": "sustained"
-  };
-  let model = await nn.createModel(options);
-  let operandIndex = 0;
-
-  // inputDims [n,h,w,i]
-  // filterDims [h,w,i,o]
-  let type0 = {type: nn.TENSOR_FLOAT32, dimensions: inputDims};
-  let type1 = {type: nn.TENSOR_FLOAT32, dimensions: [filterDims[3], filterDims[0], filterDims[1], filterDims[2]]};
-  let type2 = {type: nn.TENSOR_FLOAT32, dimensions: [filterDims[3]]};
-  let type3 = {type: nn.INT32};
-
-  let op1 = operandIndex++;
-  model.addOperand(type0);
-  let op2 = operandIndex++;
-  model.addOperand(type1);
-  let op3 = operandIndex++;
-  model.addOperand(type2);
-  let pad0 = operandIndex++;
-  model.addOperand(type3);
-  let act = operandIndex++;
-  model.addOperand(type3);
-  let stride = operandIndex++;
-  model.addOperand(type3);
-  let op4 = operandIndex++;
-  model.addOperand(type0);
-
-  const filter=await tf.zeros(filterDims).data();
-  const bias = await tf.ones([filterDims[3]]).data();
-  model.setOperandValue(op2, filter);
-  model.setOperandValue(op3, bias);
-  model.setOperandValue(pad0, new Int32Array([(filterDims[1]-1)/2]));
-  model.setOperandValue(act, new Int32Array([0]));
-  model.setOperandValue(stride, new Int32Array([1]));
-  model.addOperation(nn.CONV_2D, [op1, op2, op3, pad0, pad0, pad0, pad0, stride, stride, act], [op4]);
-
-  model.identifyInputsAndOutputs([op1], [op4]);
-  await model.finish();
-
-  let compilation = await model.createCompilation();
-  compilation.setPreference(nn.PREFER_SUSTAINED_SPEED);
-  await compilation.finish();
-  let execution = await compilation.createExecution();
-
-  const input=await tf.zeros(inputDims).data();
-  const output=await tf.zeros(inputDims).data();
-
-  execution.setInput(0, input);
-  execution.setOutput(0, output);
-
-  let start = performance.now();
-  for (let i=0;i<iterations;i++) {
-    result = await execution.startCompute();
-  }
-  console.log(output);
-  let timeCost=(performance.now()-start)/(iterations-1);
-
-  document.getElementById('op2').innerText ='WebML conv2d cost'+timeCost+'ms';
-
 }
 
 async function dualTest(inputDims,filterDims) {
