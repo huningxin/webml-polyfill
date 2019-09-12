@@ -46,6 +46,6 @@
     "@tensorflow/tfjs-core": "1.2.2",
     "@webgpu/shaderc": "0.0.6",
     "@webgpu/types": "0.0.6",
-    "local_webgpu": "file:/Users/test/Documents/NALLEIN/tfjs/tfjs-backend-webgpu/dist"
+    "local_webgpu": "file:/Users/webml/code/tfjs/tfjs-backend-webgpu/dist"
   }
 }
