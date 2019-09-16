@@ -1,3 +1,11 @@
+function product(shape) {
+  let result = 1;
+  for (let i = 0; i < shape.length; i++) {
+    result = result * shape[i];
+  }
+  return result;
+}
+
 async function executeWithWebGPU() {
   const adapter = await navigator.gpu.requestAdapter();
   const device = await adapter.requestDevice({});
@@ -60,7 +68,7 @@ async function tfAdd(inputDims) {
   document.getElementById('op1').innerText='Op add cost'+timeCost+'ms';
 }
 
-const iterations = 10;
+const iterations = 100;
 
 async function tfConv2d(inputDims,filterDims){
   tf.setBackend('webgpu');
@@ -88,7 +96,9 @@ async function tfConv2d(inputDims,filterDims){
 async function tfConv2dx2(inputDims,filterDims){
   tf.setBackend('webgpu');
   await tf.ready();
-  const input = tf.ones(inputDims);
+  const inputData = new Float32Array(product(inputDims));
+  inputData.fill(0.1);
+  const input = tf.tensor(inputData, inputDims);
   const filter = tf.ones(filterDims);
   const bias = tf.ones([filterDims[3]]);
   //warm up
@@ -321,7 +331,9 @@ async function WebNNConvGPUx2(inputDims,filterDims) {
   await compilation.finish();
   let execution = await compilation.createExecution();
 
-  const inputTensor = tf.ones(inputDims);
+  const inputData = new Float32Array(product(inputDims));
+  inputData.fill(0.1);
+  const inputTensor = tf.tensor(inputData, inputDims);
   const outputTensor = tf.zeros(inputDims);
 
   let inputBuffer = await tf.backend().getGPUBuffer(inputTensor.dataId);
@@ -406,7 +418,9 @@ async function WebNNConvGPUx2Model(inputDims,filterDims) {
   await compilation2.finish();
   let execution2 = await compilation2.createExecution();
 
-  const inputTensor = tf.ones(inputDims);
+  const inputData = new Float32Array(product(inputDims));
+  inputData.fill(0.1);
+  const inputTensor = tf.tensor(inputData, inputDims);
   const immediateTensor = tf.zeros(inputDims);
   const outputTensor = tf.zeros(inputDims);
 
@@ -417,6 +431,7 @@ async function WebNNConvGPUx2Model(inputDims,filterDims) {
   let result;
   let start = performance.now();
   for (let i=0;i<iterations;i++) {
+    // workaround: use integer to index graph
     const commandEncoder = device.createCommandEncoder();
     commandEncoder.setNnGraphInput(inputBuffer, 0, 0);
     commandEncoder.setNnGraphOutput(immediateBuffer, 0, 0);
@@ -483,7 +498,9 @@ async function WebNNConvGPUx2WithTf(inputDims,filterDims) {
   await compilation.finish();
   let execution = await compilation.createExecution();
 
-  const inputTensor = tf.ones(inputDims);
+  const inputData = new Float32Array(product(inputDims));
+  inputData.fill(0.1);
+  const inputTensor = tf.tensor(inputData, inputDims);
   const outputTensor = tf.zeros(inputDims);
 
   const filterTensor = tf.ones(filterDims);
