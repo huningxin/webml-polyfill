@@ -9,10 +9,10 @@ utils.updateProgress = updateProgress;
 function changeCanvasSize(newModel) {
   const inputSize = newModel.inputSize;
   const outputSize = newModel.outputSize;
-  inputCanvas.width = inputSize[1];
-  inputCanvas.height = inputSize[0];
-  outputCanvas.width = outputSize[1];
-  outputCanvas.height = outputSize[0];
+  inputCanvas.width = inputSize[3];
+  inputCanvas.height = inputSize[2];
+  outputCanvas.width = outputSize[3];
+  outputCanvas.height = outputSize[2];
 }
 
 

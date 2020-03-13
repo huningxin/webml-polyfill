@@ -673,6 +673,18 @@ superResolutionModels: [
     modelFile: '../super_resolution/model/srgan_128_4.tflite',
     intro: 'Photo-realistic single image Super-Resolution using a generative adversarial network.',
     paperUrl: 'https://arxiv.org/abs/1609.04802'
+  },
+  {
+    modelName: 'agora_model',
+    format: 'ONNX',
+    modelId: 'agora_model',
+    modelSize: '37.9KB',
+    inputSize: [1, 1, 240, 320],
+    outputSize: [1, 1, 480, 640],
+    scale: 2,
+    modelFile: '../super_resolution/model/new_model.onnx',
+    intro: 'Photo-realistic single image Super-Resolution using a generative adversarial network.',
+    paperUrl: 'https://arxiv.org/abs/1609.04802'
   }
 ],
 

@@ -902,6 +902,85 @@ class OnnxModelImporter {
 
           opCode = this._nn.SOFTMAX;
         } break;
+        case 'LeakyRelu':{
+          console.log(`  inputs: [${node.input}]`);
+          const input = node.input[0];
+          inputs.push(this._getTensorIdByName(input));
+
+          const alpha = getAttributeValue(node, 'alpha');
+          inputs.push(this._addScalarFloat32(alpha));
+
+          // Add outputs
+          const output = node.output[0];
+          const inputType = this._getTensorTypeByName(input);
+          const outputType = {type: this._nn.TENSOR_FLOAT32, dimensions: inputType.dimensions};
+          const outputId = this._addNewTensorOperand(output, outputType);
+          outputs.push(outputId);
+          console.log(`  output ${output}: [${inputType.dimensions}]`);
+
+          opCode = this._nn.LEAKY_RELU
+        } break;
+        case 'ConvTranspose':{
+          console.log(`  inputs: [${node.input}]`);
+          const input = node.input[0];
+          const convFilter = node.input[1];
+          const convBias = node.input[2];
+          const convFilterId = this._getTensorIdByName(convFilter);
+          const convFilterType = this._getTensorTypeByName(convFilter);
+          const dims = convFilterType.dimensions;
+          const nChannels = dims[1];
+          const convBiasId = typeof convBias !== 'undefined' ? // optional bias
+            this._getTensorIdByName(convBias) :
+            this._addTensorFloat32(new Array(nChannels).fill(0), [nChannels]);
+          inputs.push(this._getTensorIdByName(input));
+          inputs.push(convFilterId);
+          inputs.push(convBiasId);
+
+          const kernelShape = getAttributeValue(node, 'kernel_shape');
+          if (!kernelShape || kernelShape.length !== 2)
+            throw new Error('Invalid kernelShape');
+          const kernelHeight = kernelShape[0];
+          const kernelWidth = kernelShape[1];
+
+          const pads = getAttributeValue(node, 'pads', [0, 0, 0, 0]);
+          if (pads.length !== 4)
+            throw new Error('Invalid pads');
+          console.log(`  pads: [${pads}]`);
+          const paddingHeightBegin = pads[0];
+          const paddingWidthBegin = pads[1];
+          const paddingHeightEnd = pads[2];
+          const paddingWidthEnd = pads[3];
+          inputs.push(this._addScalarInt32(paddingWidthBegin));
+          inputs.push(this._addScalarInt32(paddingWidthEnd));
+          inputs.push(this._addScalarInt32(paddingHeightBegin));
+          inputs.push(this._addScalarInt32(paddingHeightEnd));
+
+          const strides = getAttributeValue(node, 'strides');
+          if (!strides || strides.length !== 2)
+            throw new Error('Invalid strides');
+          console.log(`  strides: [${strides}]`);
+          const strideY = strides[0];
+          const strideX = strides[1];
+          inputs.push(this._addScalarInt32(strideX));
+          inputs.push(this._addScalarInt32(strideY));
+
+          // Add output
+          const output = node.output[0];
+          const inputType = this._getTensorTypeByName(input);
+          const batch = inputType.dimensions[0];
+          const inputHeight = inputType.dimensions[1];
+          const inputWidth = inputType.dimensions[2];
+          const outputHeight = Math.floor((inputHeight - 1) * strideY - paddingHeightBegin - paddingHeightEnd + kernelHeight);          
+          const outputWidth = Math.floor((inputWidth - 1) * strideX - paddingWidthBegin - paddingWidthEnd + kernelWidth);
+          const outputChannels = nChannels;
+          const outputDims = [batch, outputHeight, outputWidth, outputChannels];
+          const outputType = {type: this._nn.TENSOR_FLOAT32, dimensions: outputDims};
+          const outputId = this._addNewTensorOperand(output, outputType);
+          outputs.push(outputId);
+          console.log(`  output ${output}: [${outputDims}]`);
+
+          opCode = this._nn.CONV_TRANSPOSE
+        } break;
         default: {
           throw new Error(`    ${node.opType} is not supported.`);
         }

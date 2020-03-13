@@ -35,16 +35,31 @@ class Utils {
     this.inputTensor = new Float32Array(this.product(this.inputSize));
     this.outputTensor = new Float32Array(this.product(this.outputSize));
     this.rawModel = null;
-    this.inCanvas.width = this.inputSize[1];
-    this.inCanvas.height = this.inputSize[0];
-    this.outCanvas.width = this.outputSize[1];
-    this.outCanvas.height = this.outputSize[0];
+    this.inCanvas.width = this.inputSize[3];
+    this.inCanvas.height = this.inputSize[2];
+    this.outCanvas.width = this.outputSize[3];
+    this.outCanvas.height = this.outputSize[2];
 
-    if (!this.rawModel) {
-      let result = await this.loadTfLiteModel(this.modelFile);
-      let flatBuffer = new flatbuffers.ByteBuffer(result);
-      this.rawModel = tflite.Model.getRootAsModel(flatBuffer);
-      printTfLiteModel(this.rawModel);
+    let result = await this.loadModelFile(this.modelFile);
+
+    switch (this.modelFile.split('.').pop()) {
+      case 'tflite':
+        let flatBuffer = new flatbuffers.ByteBuffer(result);
+        this.rawModel = tflite.Model.getRootAsModel(flatBuffer);
+        this.rawModel._rawFormat = 'TFLITE';
+        printTfLiteModel(this.rawModel);
+        break;
+      case 'onnx':
+        let err = onnx.ModelProto.verify(result);
+        if (err) {
+          throw new Error(`Invalid model ${err}`);
+        }
+        this.rawModel = onnx.ModelProto.decode(result);
+        this.rawModel._rawFormat = 'ONNX';
+        printOnnxModel(this.rawModel);
+        break;
+      default:
+        throw new Error('Unrecognized model format');
     }
 
     this.loaded = true;
@@ -66,7 +81,14 @@ class Utils {
       backend: backend,
       prefer: prefer
     };
-    this.model = new TFliteModelImporter(kwargs);
+    switch (this.rawModel._rawFormat) {
+      case 'TFLITE':
+        this.model = new TFliteModelImporter(kwargs);
+        break;
+      case 'ONNX':
+        this.model = new OnnxModelImporter(kwargs);
+        break;
+    }
     let result = await this.model.createCompiledModel();
     console.log(`compilation result: ${result}`);
     let start = performance.now();
@@ -113,7 +135,7 @@ class Utils {
     return {time: elapsed.toFixed(2)};
   }
 
-  async loadTfLiteModel(modelUrl) {
+  async loadModelFile(modelUrl) {
     let arrayBuffer = await this.loadUrl(modelUrl, true, true);
     let bytes = new Uint8Array(arrayBuffer);
     return bytes;
@@ -149,9 +171,9 @@ class Utils {
 
   // uint8 [0, 255] => float [-1, 1]
   prepareInputTensor(tensor, canvas) {
-    const height = this.inputSize[0];
-    const width = this.inputSize[1];
-    const channels = 3;
+    const height = this.inputSize[3];
+    const width = this.inputSize[2];
+    const channels = 1;
     const imageChannels = 4; // RGBA
     const [mean, offset] = [127.5, 1];
     if (canvas.width !== width || canvas.height !== height) {
@@ -162,7 +184,7 @@ class Utils {
     for (let y = 0; y < height; ++y) {
       for (let x = 0; x < width; ++x) {
         for (let c = 0; c < channels; ++c) {
-          let value = pixels[y * width * imageChannels + x * imageChannels + c];
+          let value = pixels[y * width * imageChannels + x * imageChannels + c]; //use R channel for test
           tensor[y * width * channels + x * channels + c] = value / mean - offset;
         }
       }
@@ -181,21 +203,26 @@ class Utils {
 
   // float [-1, 1] =>  uint8 [0, 255]
   drawOutput(canvas, imageElement) {
-    const height = this.outputSize[0];
-    const width = this.outputSize[1];
+    const height = this.outputSize[2];
+    const width = this.outputSize[3];
     const [mean, offset] = [127.5, 1];
     const bytes = new Uint8ClampedArray(width * height * 4);
     for (let i = 0; i < height * width; ++i) {
       const j = i * 4;
-      let r, g, b, a;
-      r = (this.outputTensor[i * 3] + offset) * mean;
-      g = (this.outputTensor[i * 3 + 1] + offset) * mean;
-      b = (this.outputTensor[i * 3 + 2] + offset) * mean;
-      a = 255;
+      let r = (this.outputTensor[i * 3] + offset) * mean;  //only use r channel
       bytes[j + 0] = Math.round(r);
-      bytes[j + 1] = Math.round(g);
-      bytes[j + 2] = Math.round(b);
-      bytes[j + 3] = Math.round(a);
+      bytes[j + 1] = Math.round(r);
+      bytes[j + 2] = Math.round(r);
+      bytes[j + 3] = 255;
+      // let r, g, b, a;
+      // r = (this.outputTensor[i * 3] + offset) * mean;
+      // g = (this.outputTensor[i * 3 + 1] + offset) * mean;
+      // b = (this.outputTensor[i * 3 + 2] + offset) * mean;
+      // a = 255;
+      // bytes[j + 0] = Math.round(r);
+      // bytes[j + 1] = Math.round(g);
+      // bytes[j + 2] = Math.round(b);
+      // bytes[j + 3] = Math.round(a);
     }
     const imageData = new ImageData(bytes, width, height);
 

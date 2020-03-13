@@ -649,6 +649,37 @@ export default class WebGLModel {
         const output = operands[outputs[0]];
         output.assign(tf.sigmoid(input1));
       } break;
+      case OperationCode.LEAKY_RELU: {
+        const input = operands[inputs[0]];
+        const alpha = operands[inputs[1]];
+        const output = operands[outputs[0]];
+        output.assign(tf.leakyRelu(input, alpha.value[0]));
+      } break;
+      case OperationCode.CONV_TRANSPOSE: {
+        const inCount = inputs.length;
+        if (inCount !== 9) {
+          throw new Error(`Invalid parameters number of ConvTranspose ${op}`);
+        }
+        let i = 0;
+        const input = operands[inputs[i++]];
+        const filter = operands[inputs[i++]];
+        const filter_trans = filter.transpose([3, 1, 2, 0]);
+        const bias = operands[inputs[i++]];
+        const output = operands[outputs[0]];
+        let strideW, strideH;
+
+        const paddingLeft = operands[inputs[i++]].value[0];
+        const paddingRight = operands[inputs[i++]].value[0];
+        const paddingTop = operands[inputs[i++]].value[0];
+        const paddingBottom = operands[inputs[i++]].value[0];
+        strideW = operands[inputs[i++]].value[0];
+        strideH = operands[inputs[i++]].value[0];
+
+        output.assign(input.pad([[0, 0], [paddingTop, paddingBottom], [paddingLeft, paddingRight], [0, 0]])
+                           .conv2dTranspose(filter_trans, output.shape, 
+                                            [strideH, strideW], 'valid')
+                           .add(bias));
+      } break;
       default: {
         throw new Error(`Operation ${op} is not supported`);
       }
