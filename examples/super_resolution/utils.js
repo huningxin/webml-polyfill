@@ -171,8 +171,8 @@ class Utils {
 
   // uint8 [0, 255] => float [-1, 1]
   prepareInputTensor(tensor, canvas) {
-    const height = this.inputSize[3];
-    const width = this.inputSize[2];
+    const height = this.inputSize[2];
+    const width = this.inputSize[3];
     const channels = 1;
     const imageChannels = 4; // RGBA
     const [mean, offset] = [127.5, 1];
@@ -183,13 +183,14 @@ class Utils {
     const pixels = ctx.getImageData(0, 0, width, height).data;
     for (let y = 0; y < height; ++y) {
       for (let x = 0; x < width; ++x) {
-        for (let c = 0; c < channels; ++c) {
-          let value = pixels[y * width * imageChannels + x * imageChannels + c]; //use R channel for test
-          tensor[y * width * channels + x * channels + c] = value / mean - offset;
+        let r = pixels[y*width*imageChannels+ x*imageChannels];
+        let g = pixels[y*width*imageChannels+ x*imageChannels+1];
+        let b = pixels[y*width*imageChannels+ x*imageChannels+1];
+        let gray = Math.round(r * 0.299 + g * 0.587 + b * 0.144);
+        tensor[y * width * channels + x * channels] = gray / mean - offset;
         }
       }
     }
-  }
 
   drawInput(canvas, imageElement) {
     if (imageElement.width) {
@@ -208,21 +209,12 @@ class Utils {
     const [mean, offset] = [127.5, 1];
     const bytes = new Uint8ClampedArray(width * height * 4);
     for (let i = 0; i < height * width; ++i) {
-      const j = i * 4;
-      let r = (this.outputTensor[i * 3] + offset) * mean;  //only use r channel
-      bytes[j + 0] = Math.round(r);
-      bytes[j + 1] = Math.round(r);
-      bytes[j + 2] = Math.round(r);
+      const j=i*4;  
+      let gray = (this.outputTensor[i * 3] + offset) * mean;  //only use r channel
+      bytes[j] = Math.round(gray);
+      bytes[j + 1] = Math.round(gray);
+      bytes[j + 2] = Math.round(gray);
       bytes[j + 3] = 255;
-      // let r, g, b, a;
-      // r = (this.outputTensor[i * 3] + offset) * mean;
-      // g = (this.outputTensor[i * 3 + 1] + offset) * mean;
-      // b = (this.outputTensor[i * 3 + 2] + offset) * mean;
-      // a = 255;
-      // bytes[j + 0] = Math.round(r);
-      // bytes[j + 1] = Math.round(g);
-      // bytes[j + 2] = Math.round(b);
-      // bytes[j + 3] = Math.round(a);
     }
     const imageData = new ImageData(bytes, width, height);
 

@@ -675,9 +675,9 @@ superResolutionModels: [
     paperUrl: 'https://arxiv.org/abs/1609.04802'
   },
   {
-    modelName: 'agora_model',
+    modelName: 'new_model',
     format: 'ONNX',
-    modelId: 'agora_model',
+    modelId: 'new_model',
     modelSize: '37.9KB',
     inputSize: [1, 1, 240, 320],
     outputSize: [1, 1, 480, 640],
