@@ -210,7 +210,7 @@ class Utils {
     const bytes = new Uint8ClampedArray(width * height * 4);
     for (let i = 0; i < height * width; ++i) {
       const j=i*4;  
-      let gray = (this.outputTensor[i * 3] + offset) * mean;  //only use r channel
+      let gray = (this.outputTensor[i] + offset) * mean;  //only use r channel
       bytes[j] = Math.round(gray);
       bytes[j + 1] = Math.round(gray);
       bytes[j + 2] = Math.round(gray);
