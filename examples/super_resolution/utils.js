@@ -9,6 +9,8 @@ class Utils {
     this.outputSize;
     this.inputTensor;
     this.outputTensor;
+    this.uData;
+    this.vData;
     this.inCanvas = document.createElement('canvas');
     this.inCtx = this.inCanvas.getContext('2d');
     this.outCanvas = document.createElement('canvas');
@@ -34,6 +36,8 @@ class Utils {
     this.outputSize = newModel.outputSize;
     this.inputTensor = new Float32Array(this.product(this.inputSize));
     this.outputTensor = new Float32Array(this.product(this.outputSize));
+    this.uData = new Float32Array(this.product(this.inputSize));
+    this.vData = new Float32Array(this.product(this.inputSize));
     this.rawModel = null;
     this.inCanvas.width = this.inputSize[3];
     this.inCanvas.height = this.inputSize[2];
@@ -169,28 +173,30 @@ class Utils {
     });
   }
 
-  // uint8 [0, 255] => float [-1, 1]
+  // uint8 [0, 255] => float [0, 1]
   prepareInputTensor(tensor, canvas) {
     const height = this.inputSize[2];
     const width = this.inputSize[3];
-    const channels = 1;
-    const imageChannels = 4; // RGBA
-    const [mean, offset] = [127.5, 1];
+    const [mean, offset] = [255.0, 0.0];
     if (canvas.width !== width || canvas.height !== height) {
       throw new Error(`canvas.width(${canvas.width}) is not ${width} or canvas.height(${canvas.height}) is not ${height}`);
     }
     const ctx = canvas.getContext('2d');
     const pixels = ctx.getImageData(0, 0, width, height).data;
-    for (let y = 0; y < height; ++y) {
-      for (let x = 0; x < width; ++x) {
-        let r = pixels[y*width*imageChannels+ x*imageChannels];
-        let g = pixels[y*width*imageChannels+ x*imageChannels+1];
-        let b = pixels[y*width*imageChannels+ x*imageChannels+1];
-        let gray = Math.round(r * 0.299 + g * 0.587 + b * 0.144);
-        tensor[y * width * channels + x * channels] = gray / mean - offset;
-        }
+    for(let i = 0; i < height * width; i++){
+        // RGB => YUV
+        let R = pixels[i * 4];
+        let G = pixels[i * 4 + 1];
+        let B = pixels[i * 4 + 2];
+        let A = pixels[i * 4 + 3];
+        let Y = R * 0.256789 + G * 0.504129 + B * 0.097906 + 16;
+        let U = R * (-0.148223) + G * (-0.290992) + B * 0.439215;
+        let V = R * 0.439215 + G * (-0.367789) + B * (-0.071426);
+        tensor[i] = Y / mean -offset;
+        this.uData[i] = U;
+        this.vData[i] = V;
       }
-    }
+  }
 
   drawInput(canvas, imageElement) {
     if (imageElement.width) {
@@ -202,21 +208,27 @@ class Utils {
     ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
   }
 
-  // float [-1, 1] =>  uint8 [0, 255]
+  // float [0, 1] =>  uint8 [0, 255]
   drawOutput(canvas, imageElement) {
     const height = this.outputSize[2];
     const width = this.outputSize[3];
-    const [mean, offset] = [127.5, 1];
-    const bytes = new Uint8ClampedArray(width * height * 4);
-    for (let i = 0; i < height * width; ++i) {
-      const j=i*4;  
-      let gray = (this.outputTensor[i] + offset) * mean;  //only use r channel
-      bytes[j] = Math.round(gray);
-      bytes[j + 1] = Math.round(gray);
-      bytes[j + 2] = Math.round(gray);
-      bytes[j + 3] = 255;
+    const [mean, offset] = [255.0, 0.0];
+    const srDataArray = new Uint8ClampedArray(width * height * 4);
+    for(let i = 0 ; i < this.outputTensor.length; i++) {
+      let x = parseInt((i % width) / 2 );
+      let y = parseInt((i / width) / 2);
+      let index = y * (width / 2) + x;
+
+      let Y = (this.outputTensor[i] + offset ) * mean;
+      let U = this.uData[index];
+      let V = this.vData[index];
+      //YUV => RGB
+      srDataArray[i * 4] = (Y - 16) * 1.164383 + V * 1.596027;
+      srDataArray[i * 4 + 1] = (Y - 16) * 1.164383 + U * (-0.391762) + V * (-0.812968);
+      srDataArray[i * 4 + 2] = (Y - 16) * 1.164383 + U * 2.017232;
+      srDataArray[i * 4 + 3] = 255.0;
     }
-    const imageData = new ImageData(bytes, width, height);
+    const imageData = new ImageData(srDataArray, width, height);
 
     if (imageElement.width) {
       canvas.width = imageElement.width / imageElement.height * canvas.height;
