@@ -663,7 +663,11 @@ export default class WebGLModel {
         let i = 0;
         const input = operands[inputs[i++]];
         const filter = operands[inputs[i++]];
-        const filter_trans = filter.transpose([3, 1, 2, 0]);
+        // [outChannels, filterH, filterW, inChannels]
+        // => [filterHeight, filterWidth, outDepth, inDepth]
+        // https://js.tensorflow.org/api/0.14.1/#conv2dTranspose
+        // TODO: move the tranpose to _changeWeightsFormat
+        const filter_trans = filter.transpose([1, 2, 0, 3]);
         const bias = operands[inputs[i++]];
         const output = operands[outputs[0]];
         let strideW, strideH;
