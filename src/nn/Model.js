@@ -63,7 +63,7 @@ export default class Model {
    * Determine if the OperandCode of model is quant8.
    */
   isQuant8() {
-    return this._operands[this._inputs[0]].type === OperandCode.TENSOR_QUANT8_ASYMM || this._isQuantized ? true : false;
+    return this._isQuantized;
   }
 
   /**
@@ -93,6 +93,10 @@ export default class Model {
       value: null
     }
     this._operands.push(operand);
+
+    if (this._isOperandQuantized(operand)) {
+      this._isQuantized = true;
+    }
     // return ResultCode.NO_ERROR;
   }
 
@@ -163,12 +167,6 @@ export default class Model {
     if (!this._validateOperandList(outputs)) {
       throw new Error(`Invalid outputs ${outputs}`);
     }
-    if (type === OperationCode.ADD) {
-      if (this._operands[inputs[0]].type === OperandCode.TENSOR_QUANT8_ASYMM || 
-          this._operands[inputs[1]].type === OperandCode.TENSOR_QUANT8_ASYMM) {
-        this._isQuantized = true;
-      }
-    }
     let op = {
       type: type,
       inputs: inputs,
@@ -179,6 +177,15 @@ export default class Model {
     });
     this._operations.push(op);
     // return ResultCode.NO_ERROR;
+  }
+
+  /**
+   * Determine if the operand is quantized.
+   */
+  _isOperandQuantized(operand) {
+    return operand.type === OperandCode.TENSOR_QUANT8_ASYMM ||
+           operand.type === OperandCode.TENSOR_QUANT8_SYMM_PER_CHANNEL ||
+           operand.type === OperandCode.TENSOR_QUANT8_ASYMM_SIGNED
   }
 
   /**

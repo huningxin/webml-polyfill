@@ -2,7 +2,7 @@ import {PreferenceCode,ResultCode} from './Enums'
 import Device from './wasm/Device'
 import * as utils from './utils'
 import Execution from './Execution'
-import TfjsModel from './webgl/TfjsModel'
+import TfjsModel from './tfjs/TfjsModel'
 
 export default class Compilation {
   /**
