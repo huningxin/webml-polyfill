@@ -28,6 +28,7 @@ export default class Model {
     this._eager = options.eager || false;
     this._supportedOps = options.supportedOps || new Set();
     this._isQuantized = false;
+    this._isSRModel = false;
   }
 
   /**
@@ -64,6 +65,13 @@ export default class Model {
    */
   isQuant8() {
     return this._isQuantized;
+  }
+
+  /**
+   * Determine if the current model is for super resolution.
+   */
+  isSRModel() {
+    return this._isSRModel;
   }
 
   /**
@@ -167,6 +175,11 @@ export default class Model {
     if (!this._validateOperandList(outputs)) {
       throw new Error(`Invalid outputs ${outputs}`);
     }
+
+    if (type === OperationCode.BATCH_TO_SPACE_ND) {
+      this._isSRModel = true;
+    }
+    
     let op = {
       type: type,
       inputs: inputs,
