@@ -28,7 +28,8 @@ export default class Model {
     this._eager = options.eager || false;
     this._supportedOps = options.supportedOps || new Set();
     this._isQuantized = false;
-    this._isSRModel = false;
+    this._unsupportedOp = new Set([OperationCode.BATCH_TO_SPACE_ND]);
+    this._hasUnsupportedOp = false;
   }
 
   /**
@@ -68,10 +69,10 @@ export default class Model {
   }
 
   /**
-   * Determine if the current model is for super resolution.
+   * Check if the model contains unsupported ops in tfjs wasm backend.
    */
-  isSRModel() {
-    return this._isSRModel;
+  hasUnsupportedOp() {
+    return this._hasUnsupportedOp;
   }
 
   /**
@@ -176,10 +177,10 @@ export default class Model {
       throw new Error(`Invalid outputs ${outputs}`);
     }
 
-    if (type === OperationCode.BATCH_TO_SPACE_ND) {
-      this._isSRModel = true;
+    if (this._unsupportedOp.has(type)) {
+      this._hasUnsupportedOp = true;
     }
-    
+
     let op = {
       type: type,
       inputs: inputs,

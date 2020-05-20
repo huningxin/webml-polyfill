@@ -55,7 +55,7 @@ export default class Compilation {
   async finish() {
     switch (this._backend) {
       case 'WASM': {
-        if (this._model.isQuant8() || this._model.isSRModel()) {
+        if (this._model.isQuant8() || this._model.hasUnsupportedOp()) {
           this._preparedModel = await this._device.prepareModel(this._model);
         } else {
           this._preparedModel = new TfjsModel(this._model);
